@@ -2,7 +2,9 @@ from fastapi import FastAPI
 from fastapi.responses import Response
 
 from app.api.v1.routes import router as v1_router
-from app.core.config import settings
+from app.core.config import settings, validate_settings
+
+validate_settings(settings)
 
 app = FastAPI(
     title=settings.app_name,
