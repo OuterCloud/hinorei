@@ -10,6 +10,8 @@ pip install -r requirements.txt
 
 # 配置 Git hooks（防止敏感信息提交，所有贡献者必须执行）
 make setup
+# make setup 会生成 .sensitive-patterns，按实际情况填入需要拦截的敏感词，每行一个
+# 例如：公司域名、内部服务名等
 
 # 复制并填写环境变量
 cp .env.example .env
