@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
     minimax_api_key: str = ""
+    llm_bridge_api_key: str = ""
+    llm_bridge_base_url: str = ""
+    llm_bridge_default_model: str = ""
 
     class Config:
         env_file = ".env"
