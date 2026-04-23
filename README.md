@@ -1,6 +1,6 @@
 # Hinorei
 
-基于 FastAPI + MiniMax 大模型的对话服务。
+基于 FastAPI 的多 provider 大模型对话服务，支持 MiniMax 和 LLM Bridge（OpenAI 兼容接口）。
 
 ## 快速开始
 
@@ -15,7 +15,6 @@ make setup
 cp .env.example .env
 
 # 启动开发服务器
-# 如果启动失败，请检查 .env 文件，确保环境变量填写正确
 uvicorn app.main:app --reload
 ```
 
@@ -23,22 +22,39 @@ uvicorn app.main:app --reload
 
 ## 环境变量
 
-| 变量              | 说明                                                                                 |
-| ----------------- | ------------------------------------------------------------------------------------ |
-| `MINIMAX_API_KEY` | MiniMax 平台 API Key，从 [platform.minimaxi.com](https://platform.minimaxi.com) 获取 |
+| 变量                       | 必填 | 说明                                                                                   |
+| -------------------------- | ---- | -------------------------------------------------------------------------------------- |
+| `MINIMAX_API_KEY`          | ✅   | MiniMax 平台 API Key，从 [platform.minimaxi.com](https://platform.minimaxi.com) 获取   |
+| `LLM_BRIDGE_API_KEY`       |      | LLM Bridge API Key                                                                     |
+| `LLM_BRIDGE_BASE_URL`      |      | LLM Bridge 服务地址                                                                    |
+| `LLM_BRIDGE_DEFAULT_MODEL` |      | LLM Bridge 默认模型名                                                                  |
 
 ## 接口
 
 ### POST /api/v1/chat
 
-向 MiniMax 大模型提问，返回回复。
-
 请求体：
+
+| 字段       | 类型   | 默认值      | 说明                              |
+| ---------- | ------ | ----------- | --------------------------------- |
+| `message`  | string | —           | 用户消息                          |
+| `provider` | string | `minimax`   | provider，可选 `minimax` / `llm_bridge` |
+| `model`    | string | provider 默认 | 模型名，不传时使用 provider 默认值 |
+
+**使用 MiniMax：**
+
+```json
+{
+  "message": "你好，介绍一下你自己"
+}
+```
+
+**使用 LLM Bridge：**
 
 ```json
 {
   "message": "你好，介绍一下你自己",
-  "model": "MiniMax-M2.5"
+  "provider": "llm_bridge"
 }
 ```
 
@@ -46,23 +62,21 @@ uvicorn app.main:app --reload
 
 ```json
 {
-  "reply": "你好！我是 MiniMax 开发的..."
+  "reply": "你好！我是..."
 }
 ```
-
-`model` 字段可选，默认 `MiniMax-M2.5`，支持的模型见 [MiniMax 文档](https://platform.minimaxi.com/docs/guides/text-generation)。
 
 ## 项目结构
 
 ```
 app/
 ├── api/v1/routes/   # 路由层
-├── core/            # 配置、基础设施
-├── services/        # 业务逻辑（minimax.py 等）
+├── core/            # 配置
+├── services/        # 业务逻辑（minimax.py、llm_bridge.py）
 ├── models/          # 数据库模型
 ├── schemas/         # 请求/响应 Schema
 └── main.py
-tests/               # 测试脚本
+tests/               # 测试
 ```
 
 ## 添加新接口
