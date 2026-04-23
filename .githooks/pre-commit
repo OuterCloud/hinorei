@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# 军规：禁止将敏感信息提交到代码库
+# 敏感词配置在 .sensitive-patterns（本地文件，不进仓库）
+
+PATTERNS_FILE="$(git rev-parse --show-toplevel)/.sensitive-patterns"
+
+if [ ! -f "$PATTERNS_FILE" ]; then
+    echo "⚠️  未找到 .sensitive-patterns，请执行 make setup 完成初始化。"
+    exit 0
+fi
+
+staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep -v '^\.githooks/')
+
+if [ -z "$staged_files" ]; then
+    exit 0
+fi
+
+found=0
+while IFS= read -r pattern || [ -n "$pattern" ]; do
+    [[ "$pattern" =~ ^#.*$ || -z "$pattern" ]] && continue
+    matches=$(echo "$staged_files" | xargs grep -rl "$pattern" 2>/dev/null)
+    if [ -n "$matches" ]; then
+        echo "❌ 提交被拦截：检测到敏感词 \"$pattern\""
+        echo "$matches" | sed 's/^/   /'
+        found=1
+    fi
+done < "$PATTERNS_FILE"
+
+if [ "$found" -ne 0 ]; then
+    echo ""
+    echo "请将敏感信息移至 .env（已在 .gitignore 中），代码中使用环境变量替代。"
+    exit 1
+fi

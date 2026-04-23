@@ -1,0 +1,6 @@
+# 敏感词列表，每行一个
+# 复制为 .sensitive-patterns 并填入实际敏感词（该文件不进仓库）
+#
+# 示例：
+# your-company-name
+# your-internal-domain
