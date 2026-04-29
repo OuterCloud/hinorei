@@ -1,96 +1,115 @@
 # Hinorei
 
-基于 FastAPI 的多 provider 大模型对话服务，支持 MiniMax 和 LLM Bridge（OpenAI 兼容接口）。
+基于 FastAPI + Vue 3 的多 provider 大模型对话服务，支持 MiniMax 和 LLM Bridge（OpenAI 兼容接口）。
+
+内置前端界面，提供 Dashboard（系统状态）、Chat（AI 对话 + Markdown 渲染）、文件管理（上传 / 下载）三个模块，自动跟随系统暗色模式。
 
 ## 快速开始
 
+### 1. 后端依赖
+
 ```bash
-# 安装依赖
-pip install -r requirements.txt
-
-# 配置 Git hooks（防止敏感信息提交，所有贡献者必须执行）
-make setup
-# make setup 会生成 .sensitive-patterns，按实际情况填入需要拦截的敏感词，每行一个
-# 例如：公司域名、内部服务名等
-
-# 复制并填写环境变量
-cp .env.example .env
-
-# 启动开发服务器
-uvicorn app.main:app --reload
+python -m venv venv
+venv/bin/pip install -r requirements.txt
 ```
 
-访问 http://localhost:8000/docs 查看自动生成的 API 文档。
+### 2. 配置环境变量
+
+```bash
+cp .env.example .env
+# 编辑 .env，填入 API Key 等配置
+```
+
+### 3. 配置 Git hooks（贡献者必须执行）
+
+```bash
+make setup
+```
+
+### 4. 启动服务
+
+```bash
+# 一键编译前端 + 后台启动后端
+./deploy.sh start
+
+# 查看运行状态
+./deploy.sh status
+
+# 停止 / 重启
+./deploy.sh stop
+./deploy.sh restart
+
+# 实时查看日志
+./deploy.sh logs -f
+```
+
+访问 http://localhost:8000 打开前端界面，http://localhost:8000/docs 查看 API 文档。
+
+### 开发模式
+
+```bash
+# 后端（热重载）
+uvicorn app.main:app --reload
+
+# 前端（Vite HMR，代理到 :8000）
+make frontend-dev
+```
+
+## 部署脚本选项
+
+```bash
+./deploy.sh start [--host HOST] [--port PORT] [--workers N] [--no-build]
+```
+
+| 选项 | 环境变量 | 默认值 | 说明 |
+|------|---------|--------|------|
+| `--host` | `HINOREI_HOST` | `0.0.0.0` | 监听地址 |
+| `--port` | `HINOREI_PORT` | `8000` | 监听端口 |
+| `--workers` | `HINOREI_WORKERS` | `1` | 工作进程数 |
+| `--no-build` | — | — | 跳过前端编译 |
 
 ## 环境变量
 
-| 变量                       | 必填 | 说明                                                                                   |
-| -------------------------- | ---- | -------------------------------------------------------------------------------------- |
-| `MINIMAX_API_KEY`          | ✅   | MiniMax 平台 API Key，从 [platform.minimaxi.com](https://platform.minimaxi.com) 获取   |
-| `LLM_BRIDGE_API_KEY`       |      | LLM Bridge API Key                                                                     |
-| `LLM_BRIDGE_BASE_URL`      |      | LLM Bridge 服务地址                                                                    |
-| `LLM_BRIDGE_DEFAULT_MODEL` |      | LLM Bridge 默认模型名                                                                  |
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `MINIMAX_API_KEY` | ✅ | MiniMax 平台 API Key（[platform.minimaxi.com](https://platform.minimaxi.com)） |
+| `LLM_BRIDGE_API_KEY` | | LLM Bridge API Key |
+| `LLM_BRIDGE_BASE_URL` | | LLM Bridge 服务地址 |
+| `LLM_BRIDGE_DEFAULT_MODEL` | | LLM Bridge 默认模型名 |
 
-## 接口
+## API
 
-### POST /api/v1/files/upload
+### GET /api/v1/health
 
-上传文件到服务器（保存至 `can_be_downloaded/` 目录）。
-
-请求：`multipart/form-data`，字段名 `file`。
-
-响应：
+返回服务健康状态及可用 providers。
 
 ```json
-{
-  "message": "Successfully uploaded example.txt"
-}
+{ "status": "ok", "app_name": "My API", "version": "0.1.0", "providers": ["minimax"] }
 ```
-
-### GET /api/v1/files/download
-
-返回 HTML 页面，列出所有可下载的文件及其下载链接。
-
-### GET /api/v1/files/download/{filename}
-
-下载指定文件，以 `application/octet-stream` 形式返回。
-
----
 
 ### POST /api/v1/chat
 
-请求体：
-
-| 字段       | 类型   | 默认值      | 说明                              |
-| ---------- | ------ | ----------- | --------------------------------- |
-| `message`  | string | —           | 用户消息                          |
-| `provider` | string | `minimax`   | provider，可选 `minimax` / `llm_bridge` |
-| `model`    | string | provider 默认 | 模型名，不传时使用 provider 默认值 |
-
-**使用 MiniMax：**
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `message` | string | — | 用户消息 |
+| `provider` | string | `minimax` | `minimax` / `llm_bridge` |
+| `model` | string | provider 默认 | 模型名，不传时使用 provider 默认值 |
 
 ```json
-{
-  "message": "你好，介绍一下你自己"
-}
+{ "reply": "你好！我是..." }
 ```
 
-**使用 LLM Bridge：**
+### GET /api/v1/files/list
 
-```json
-{
-  "message": "你好，介绍一下你自己",
-  "provider": "llm_bridge"
-}
-```
+返回可下载文件列表：`{ "files": [{ "name", "size", "modified" }] }`
 
-响应：
+### POST /api/v1/files/upload
 
-```json
-{
-  "reply": "你好！我是..."
-}
-```
+`multipart/form-data`，字段名 `file`。
+
+### GET /api/v1/files/download/{filename}
+
+下载指定文件（`application/octet-stream`）。
 
 ## 项目结构
 
@@ -99,15 +118,25 @@ app/
 ├── api/v1/routes/   # 路由层（chat.py、files.py、health.py）
 ├── core/            # 配置
 ├── services/        # 业务逻辑（minimax.py、llm_bridge.py）
-├── models/          # 数据库模型
-├── schemas/         # 请求/响应 Schema
 └── main.py
+frontend/            # Vue 3 前端工程（Vite + Naive UI + Pinia）
+├── src/
+│   ├── api/         # Axios 封装
+│   ├── modules/     # 功能模块（dashboard / chat / files）
+│   ├── layouts/     # 主布局
+│   ├── router/      # Vue Router
+│   ├── stores/      # Pinia store
+│   └── types/       # TypeScript 类型
+├── package.json
+└── vite.config.ts
 can_be_downloaded/   # 文件上传存储目录（运行时自动创建）
+deploy.sh            # 服务部署脚本（start / stop / restart / status / logs）
+logs/                # 服务运行日志（运行时自动创建）
 tests/               # 测试
 ```
 
-## 添加新接口
+## 扩展新模块（前端）
 
-1. 在 `app/api/v1/routes/` 下新建路由文件
-2. 在 `app/api/v1/routes/__init__.py` 中注册路由
-3. 在 `app/services/` 下编写业务逻辑
+1. 创建 `frontend/src/modules/{name}/index.vue`
+2. 在 `frontend/src/router/index.ts` 添加路由
+3. 在 `frontend/src/layouts/MainLayout.vue` 的 `navItems` 追加导航项
