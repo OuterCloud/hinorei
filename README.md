@@ -33,6 +33,30 @@ uvicorn app.main:app --reload
 
 ## 接口
 
+### POST /api/v1/files/upload
+
+上传文件到服务器（保存至 `can_be_downloaded/` 目录）。
+
+请求：`multipart/form-data`，字段名 `file`。
+
+响应：
+
+```json
+{
+  "message": "Successfully uploaded example.txt"
+}
+```
+
+### GET /api/v1/files/download
+
+返回 HTML 页面，列出所有可下载的文件及其下载链接。
+
+### GET /api/v1/files/download/{filename}
+
+下载指定文件，以 `application/octet-stream` 形式返回。
+
+---
+
 ### POST /api/v1/chat
 
 请求体：
@@ -72,12 +96,13 @@ uvicorn app.main:app --reload
 
 ```
 app/
-├── api/v1/routes/   # 路由层
+├── api/v1/routes/   # 路由层（chat.py、files.py、health.py）
 ├── core/            # 配置
 ├── services/        # 业务逻辑（minimax.py、llm_bridge.py）
 ├── models/          # 数据库模型
 ├── schemas/         # 请求/响应 Schema
 └── main.py
+can_be_downloaded/   # 文件上传存储目录（运行时自动创建）
 tests/               # 测试
 ```
 
