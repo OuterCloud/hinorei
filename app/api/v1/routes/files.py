@@ -10,6 +10,17 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 router = APIRouter()
 
 
+@router.get("/list")
+async def list_files():
+    files = []
+    for name in os.listdir(DOWNLOAD_DIR):
+        path = os.path.join(DOWNLOAD_DIR, name)
+        if os.path.isfile(path):
+            stat = os.stat(path)
+            files.append({"name": name, "size": stat.st_size, "modified": stat.st_mtime})
+    return {"files": files}
+
+
 @router.get("/download", response_class=HTMLResponse)
 async def download_page():
     files = os.listdir(DOWNLOAD_DIR)
