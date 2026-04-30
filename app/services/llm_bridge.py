@@ -3,6 +3,18 @@ import httpx
 from app.core.config import settings
 
 
+def list_models() -> list[str]:
+    """
+    获取 LLM Bridge 可用模型列表（OpenAI /v1/models 接口）。
+    """
+    url = f"{settings.llm_bridge_base_url}/v1/models"
+    headers = {"Authorization": f"Bearer {settings.llm_bridge_api_key}"}
+    with httpx.Client(timeout=15.0) as client:
+        response = client.get(url, headers=headers)
+        response.raise_for_status()
+    return [m["id"] for m in response.json().get("data", [])]
+
+
 def chat(
     message: str,
     model: str = "",

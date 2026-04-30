@@ -24,11 +24,11 @@ import type { Provider } from '@/types'
 const chatStore = useChatStore()
 const notification = useNotification()
 
-async function handleSend(text: string, provider: Provider) {
+async function handleSend(text: string, provider: Provider, model: string) {
   chatStore.addMessage('user', text)
   chatStore.loading = true
   try {
-    const result = await sendMessage({ message: text, provider })
+    const result = await sendMessage({ message: text, provider, model: model || undefined })
     chatStore.addMessage('assistant', result.response, {
       provider: result.provider,
       model: result.model,

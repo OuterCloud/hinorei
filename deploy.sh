@@ -2,9 +2,9 @@
 # =============================================================================
 # deploy.sh — Hinorei 服务部署脚本
 # 用法:
-#   ./deploy.sh start   [--host HOST] [--port PORT] [--workers N] [--no-build]
+#   ./deploy.sh start   [PORT] [--host HOST] [--port PORT] [-p PORT] [--workers N] [--no-build]
 #   ./deploy.sh stop
-#   ./deploy.sh restart [--host HOST] [--port PORT] [--workers N] [--no-build]
+#   ./deploy.sh restart [PORT] [--host HOST] [--port PORT] [-p PORT] [--workers N] [--no-build]
 #   ./deploy.sh status
 #   ./deploy.sh build           # 仅编译前端，不启动服务
 #   ./deploy.sh logs [-f]       # 查看日志（-f 实时追踪）
@@ -65,13 +65,17 @@ ${BOLD}命令:${RESET}
 
 ${BOLD}选项:${RESET}
   --host HOST       监听地址（默认: 0.0.0.0，可用 HINOREI_HOST 环境变量设置）
-  --port PORT       监听端口（默认: 8000，可用 HINOREI_PORT 环境变量设置）
+  --port PORT, -p PORT
+                    监听端口（默认: 8000，可用 HINOREI_PORT 环境变量设置）
+  PORT              直接写端口号作为第一个位置参数（同 --port）
   --workers N       工作进程数（默认: 1，可用 HINOREI_WORKERS 环境变量设置）
   --no-build        跳过前端编译，直接使用已有的 dist/
   -f                配合 logs 命令实时追踪日志
 
 ${BOLD}示例:${RESET}
   ./deploy.sh start
+  ./deploy.sh start 9000
+  ./deploy.sh start -p 9000 --workers 2
   ./deploy.sh start --port 9000 --workers 2
   ./deploy.sh restart --no-build
   ./deploy.sh logs -f
@@ -84,12 +88,13 @@ EOF
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --host)     HOST="$2"; shift 2 ;;
-      --port)     PORT="$2"; shift 2 ;;
-      --workers)  WORKERS="$2"; shift 2 ;;
-      --no-build) SKIP_BUILD=true; shift ;;
-      -h|--help)  usage; exit 0 ;;
-      *)          shift ;;  # 忽略未知参数（命令名等由调用方先消费掉）
+      --host)          HOST="$2"; shift 2 ;;
+      --port|-p)       PORT="$2"; shift 2 ;;
+      --workers)       WORKERS="$2"; shift 2 ;;
+      --no-build)      SKIP_BUILD=true; shift ;;
+      -h|--help)       usage; exit 0 ;;
+      [0-9]*)          PORT="$1"; shift ;;  # 位置参数：直接写端口号
+      *)               shift ;;  # 忽略未知参数
     esac
   done
 }

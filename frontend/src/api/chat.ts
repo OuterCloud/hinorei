@@ -19,3 +19,8 @@ export async function getHealth(): Promise<HealthStatus> {
   const { data } = await client.get<HealthStatus>('/health')
   return data
 }
+
+export async function getModels(): Promise<string[]> {
+  const { data } = await client.get<{ models: string[] }>('/models')
+  return data.models
+}
