@@ -2,11 +2,12 @@
 # =============================================================================
 # deploy.sh — Hinorei 服务部署脚本
 # 用法:
-#   ./deploy.sh start   [PORT] [--host HOST] [--port PORT] [-p PORT] [--workers N] [--no-build]
+#   ./deploy.sh start   [PORT] [--host HOST] [--port PORT] [-p PORT] [--workers N] [-B]
 #   ./deploy.sh stop
-#   ./deploy.sh restart [PORT] [--host HOST] [--port PORT] [-p PORT] [--workers N] [--no-build]
+#   ./deploy.sh restart [PORT] [--host HOST] [--port PORT] [-p PORT] [--workers N] [-B]
 #   ./deploy.sh status
 #   ./deploy.sh build           # 仅编译前端，不启动服务
+#   ./deploy.sh debug  [PORT]   # 调试模式：后端热重载 + 前端 HMR，Ctrl+C 退出
 #   ./deploy.sh logs [-f]       # 查看日志（-f 实时追踪）
 # =============================================================================
 
@@ -29,7 +30,7 @@ DIST_DIR="$FRONTEND_DIR/dist"
 HOST="${HINOREI_HOST:-0.0.0.0}"
 PORT="${HINOREI_PORT:-8000}"
 WORKERS="${HINOREI_WORKERS:-1}"
-SKIP_BUILD=false
+FORCE_BUILD=false
 
 # --------------------------------------------------------------------------- #
 # 颜色输出
@@ -61,6 +62,7 @@ ${BOLD}命令:${RESET}
   restart   停止后重新编译并启动
   status    显示服务运行状态
   build     仅编译前端静态文件
+  debug     调试模式：后端热重载 + 前端 HMR，Ctrl+C 退出
   logs      查看服务日志
 
 ${BOLD}选项:${RESET}
@@ -69,15 +71,16 @@ ${BOLD}选项:${RESET}
                     监听端口（默认: 8000，可用 HINOREI_PORT 环境变量设置）
   PORT              直接写端口号作为第一个位置参数（同 --port）
   --workers N       工作进程数（默认: 1，可用 HINOREI_WORKERS 环境变量设置）
-  --no-build        跳过前端编译，直接使用已有的 dist/
+  -B, --force-build 强制重新编译前端（默认：源码无变化时跳过）
   -f                配合 logs 命令实时追踪日志
 
 ${BOLD}示例:${RESET}
-  ./deploy.sh start
+  ./deploy.sh start              # 源码未变化则跳过编译
   ./deploy.sh start 9000
+  ./deploy.sh start -B           # 强制重编
   ./deploy.sh start -p 9000 --workers 2
-  ./deploy.sh start --port 9000 --workers 2
-  ./deploy.sh restart --no-build
+  ./deploy.sh debug              # 本地调试，改代码自动生效
+  ./deploy.sh debug 9000         # 指定后端端口
   ./deploy.sh logs -f
 EOF
 }
@@ -91,7 +94,7 @@ parse_args() {
       --host)          HOST="$2"; shift 2 ;;
       --port|-p)       PORT="$2"; shift 2 ;;
       --workers)       WORKERS="$2"; shift 2 ;;
-      --no-build)      SKIP_BUILD=true; shift ;;
+      -B|--force-build) FORCE_BUILD=true; shift ;;
       -h|--help)       usage; exit 0 ;;
       [0-9]*)          PORT="$1"; shift ;;  # 位置参数：直接写端口号
       *)               shift ;;  # 忽略未知参数
@@ -118,12 +121,45 @@ require_venv() {
   fi
 }
 
+# 检查前端源码是否比 dist/ 更新，是则需要重编
+needs_build() {
+  local marker="$DIST_DIR/index.html"
+  [[ ! -f "$marker" ]] && return 0  # dist 不存在，必须编译
+  # 检查 src/、public/、配置文件中是否有比 dist 更新的文件
+  local changed
+  changed=$(find "$FRONTEND_DIR/src" "$FRONTEND_DIR/public" \
+    "$FRONTEND_DIR/index.html" \
+    "$FRONTEND_DIR/package.json" \
+    "$FRONTEND_DIR/vite.config."* \
+    -newer "$marker" 2>/dev/null | head -1)
+  [[ -n "$changed" ]]
+}
+
 require_node() {
   if ! command -v node &>/dev/null; then
     die "未找到 node。请先安装 Node.js >= 18"
   fi
-  if ! command -v npm &>/dev/null; then
-    die "未找到 npm。请先安装 npm"
+  if ! command -v pnpm &>/dev/null; then
+    die "未找到 pnpm。请先安装：npm install -g pnpm"
+  fi
+}
+
+# 释放端口：终止占用指定端口的进程
+kill_port() {
+  local port="$1"
+  local pids
+  pids=$(lsof -ti :"$port" 2>/dev/null || true)
+  if [[ -n "$pids" ]]; then
+    warn "端口 ${port} 被占用（PID: ${pids}），正在终止..."
+    echo "$pids" | xargs kill -TERM 2>/dev/null || true
+    sleep 0.8
+    # 若仍存活则强制 KILL
+    local remaining
+    remaining=$(lsof -ti :"$port" 2>/dev/null || true)
+    if [[ -n "$remaining" ]]; then
+      echo "$remaining" | xargs kill -KILL 2>/dev/null || true
+    fi
+    success "端口 ${port} 已释放"
   fi
 }
 
@@ -134,12 +170,12 @@ cmd_build() {
   require_node
   info "检查前端依赖..."
   if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
-    info "安装前端依赖（npm install）..."
-    (cd "$FRONTEND_DIR" && npm install) \
+    info "安装前端依赖（pnpm install）..."
+    (cd "$FRONTEND_DIR" && pnpm install) \
       || die "前端依赖安装失败"
   fi
-  info "编译前端（npm run build）..."
-  (cd "$FRONTEND_DIR" && npm run build) \
+  info "编译前端（pnpm build）..."
+  (cd "$FRONTEND_DIR" && pnpm build) \
     || die "前端编译失败"
   success "前端编译完成 → $DIST_DIR"
 }
@@ -157,17 +193,19 @@ cmd_start() {
   require_venv
 
   # 前端编译
-  if [[ "$SKIP_BUILD" == true ]]; then
-    if [[ ! -d "$DIST_DIR" ]]; then
-      die "--no-build 指定跳过编译，但 $DIST_DIR 不存在。请先运行: ./deploy.sh build"
-    fi
-    info "跳过前端编译（--no-build）"
-  else
+  if [[ "$FORCE_BUILD" == true ]]; then
     cmd_build
+  elif needs_build; then
+    info "检测到前端源码有变化，开始编译..."
+    cmd_build
+  else
+    info "前端源码无变化，跳过编译（使用已有 dist/）"
   fi
 
   # 创建日志目录
   mkdir -p "$LOG_DIR"
+
+  kill_port "$PORT"
 
   info "启动后端服务..."
   info "  地址:    http://${HOST}:${PORT}"
@@ -238,6 +276,44 @@ cmd_restart() {
   cmd_stop
   sleep 1
   cmd_start
+}
+
+# --------------------------------------------------------------------------- #
+# 子命令：debug
+# --------------------------------------------------------------------------- #
+cmd_debug() {
+  require_venv
+  require_node
+
+  if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
+    info "安装前端依赖（pnpm install）..."
+    (cd "$FRONTEND_DIR" && pnpm install) || die "前端依赖安装失败"
+  fi
+
+  info "启动调试模式"
+  info "  后端: http://${HOST}:${PORT}  （Python 改动自动重载）"
+  info "  前端: http://localhost:5173   （Vite HMR 热更新）"
+  info "  按 Ctrl+C 退出所有进程"
+  echo ""
+
+  kill_port "$PORT"
+
+  # 后台启动后端（--reload 监听 Python 文件变动）
+  "$VENV_DIR/bin/uvicorn" app.main:app \
+    --reload \
+    --host "$HOST" \
+    --port "$PORT" &
+  local backend_pid=$!
+
+  # Ctrl+C 或脚本退出时一并终止后端
+  trap "echo ''; info '正在退出...'; kill $backend_pid 2>/dev/null; wait $backend_pid 2>/dev/null; exit 0" INT TERM
+
+  # 前台启动前端（Ctrl+C 会触发上方 trap）
+  (cd "$FRONTEND_DIR" && pnpm dev) || true
+
+  # 前端退出后也清理后端
+  kill $backend_pid 2>/dev/null
+  wait $backend_pid 2>/dev/null
 }
 
 # --------------------------------------------------------------------------- #
@@ -317,6 +393,7 @@ case "$COMMAND" in
   start)   cmd_start   ;;
   stop)    cmd_stop    ;;
   restart) cmd_restart ;;
+  debug)   cmd_debug   ;;
   status)  cmd_status  ;;
   build)   cmd_build   ;;
   logs)    cmd_logs    ;;

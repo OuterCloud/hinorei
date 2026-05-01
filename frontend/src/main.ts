@@ -1,3 +1,4 @@
+import 'github-markdown-css/github-markdown-dark.css'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import router from './router'

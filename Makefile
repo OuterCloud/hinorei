@@ -9,13 +9,13 @@ setup:
 	@echo "Git hooks 已配置，敏感信息拦截规则生效。"
 
 frontend-install:
-	cd frontend && npm install
+	cd frontend && pnpm install
 
 frontend-dev:
-	cd frontend && npm run dev
+	cd frontend && pnpm dev
 
 frontend-build:
-	cd frontend && npm run build
+	cd frontend && pnpm build
 
 dev: frontend-build
 	uvicorn app.main:app --reload

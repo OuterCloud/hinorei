@@ -2,7 +2,7 @@
 
 基于 FastAPI + Vue 3 的多 provider 大模型对话服务，支持 MiniMax 和 LLM Bridge（OpenAI 兼容接口）。
 
-内置前端界面，提供 Dashboard（系统状态）、Chat（AI 对话 + Markdown 渲染）、文件管理（上传 / 下载）三个模块，自动跟随系统暗色模式。
+内置前端界面，提供 Dashboard（系统状态）、Chat（AI 对话 + Markdown 渲染 + 模型选择）、文件管理（上传 / 下载）三个模块，自动跟随系统暗色模式。
 
 ## 快速开始
 
@@ -13,23 +13,31 @@ python -m venv venv
 venv/bin/pip install -r requirements.txt
 ```
 
-### 2. 配置环境变量
+### 2. 前端依赖
+
+```bash
+# 需要 Node.js >= 18 和 pnpm
+npm install -g pnpm
+make frontend-install
+```
+
+### 3. 配置环境变量
 
 ```bash
 cp .env.example .env
 # 编辑 .env，填入 API Key 等配置
 ```
 
-### 3. 配置 Git hooks（贡献者必须执行）
+### 4. 配置 Git hooks（贡献者必须执行）
 
 ```bash
 make setup
 ```
 
-### 4. 启动服务
+### 5. 启动服务
 
 ```bash
-# 一键编译前端 + 后台启动后端
+# 一键编译前端 + 后台启动后端（源码无变化时自动跳过编译）
 ./deploy.sh start
 
 # 查看运行状态
@@ -45,28 +53,49 @@ make setup
 
 访问 http://localhost:8000 打开前端界面，http://localhost:8000/docs 查看 API 文档。
 
-### 开发模式
+### 本地调试模式
+
+改代码无需重启或重新编译，直接生效：
 
 ```bash
-# 后端（热重载）
-uvicorn app.main:app --reload
-
-# 前端（Vite HMR，代理到 :8000）
-make frontend-dev
+./deploy.sh debug
 ```
 
-## 部署脚本选项
+- 后端：uvicorn `--reload`，Python 文件保存后自动重载，访问 http://localhost:8000
+- 前端：Vite HMR，Vue/TS 文件保存后浏览器毫秒级更新，访问 http://localhost:5173
+- `Ctrl+C` 同时退出前后端
+
+## 部署脚本
 
 ```bash
-./deploy.sh start [--host HOST] [--port PORT] [--workers N] [--no-build]
+./deploy.sh <命令> [选项]
 ```
+
+| 命令 | 说明 |
+|------|------|
+| `start` | 编译前端（源码无变化自动跳过）并后台启动后端 |
+| `stop` | 停止后端服务 |
+| `restart` | 停止后重新启动 |
+| `debug` | 调试模式：后端热重载 + 前端 HMR，前台运行 |
+| `status` | 显示服务运行状态 |
+| `build` | 仅编译前端静态文件 |
+| `logs` | 查看服务日志（`-f` 实时追踪） |
+
+**start / restart 选项：**
 
 | 选项 | 环境变量 | 默认值 | 说明 |
 |------|---------|--------|------|
-| `--host` | `HINOREI_HOST` | `0.0.0.0` | 监听地址 |
-| `--port` | `HINOREI_PORT` | `8000` | 监听端口 |
-| `--workers` | `HINOREI_WORKERS` | `1` | 工作进程数 |
-| `--no-build` | — | — | 跳过前端编译 |
+| `PORT`（位置参数）| `HINOREI_PORT` | `8000` | 监听端口 |
+| `--port PORT`, `-p PORT` | `HINOREI_PORT` | `8000` | 监听端口 |
+| `--host HOST` | `HINOREI_HOST` | `0.0.0.0` | 监听地址 |
+| `--workers N` | `HINOREI_WORKERS` | `1` | 工作进程数 |
+| `-B`, `--force-build` | — | — | 强制重新编译前端 |
+
+```bash
+./deploy.sh start 9000          # 指定端口
+./deploy.sh start -p 9000 -B    # 指定端口并强制重编
+./deploy.sh debug 9000          # 调试模式指定后端端口
+```
 
 ## 环境变量
 
@@ -99,6 +128,14 @@ make frontend-dev
 { "reply": "你好！我是..." }
 ```
 
+### GET /api/v1/models
+
+返回 LLM Bridge 可用模型列表。
+
+```json
+{ "models": ["gpt-4o", "gpt-4o-mini", "..."] }
+```
+
 ### GET /api/v1/files/list
 
 返回可下载文件列表：`{ "files": [{ "name", "size", "modified" }] }`
@@ -115,11 +152,11 @@ make frontend-dev
 
 ```
 app/
-├── api/v1/routes/   # 路由层（chat.py、files.py、health.py）
+├── api/v1/routes/   # 路由层（chat.py、files.py、health.py、models.py）
 ├── core/            # 配置
 ├── services/        # 业务逻辑（minimax.py、llm_bridge.py）
 └── main.py
-frontend/            # Vue 3 前端工程（Vite + Naive UI + Pinia）
+frontend/            # Vue 3 前端工程（Vite + Naive UI + Pinia + pnpm）
 ├── src/
 │   ├── api/         # Axios 封装
 │   ├── modules/     # 功能模块（dashboard / chat / files）
@@ -128,9 +165,10 @@ frontend/            # Vue 3 前端工程（Vite + Naive UI + Pinia）
 │   ├── stores/      # Pinia store
 │   └── types/       # TypeScript 类型
 ├── package.json
+├── pnpm-lock.yaml
 └── vite.config.ts
 can_be_downloaded/   # 文件上传存储目录（运行时自动创建）
-deploy.sh            # 服务部署脚本（start / stop / restart / status / logs）
+deploy.sh            # 服务部署脚本（start / stop / restart / debug / status / build / logs）
 logs/                # 服务运行日志（运行时自动创建）
 tests/               # 测试
 ```

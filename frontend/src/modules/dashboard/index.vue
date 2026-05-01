@@ -102,6 +102,8 @@ onMounted(async () => {
 <style scoped>
 .dashboard {
   max-width: 1000px;
+  overflow: auto;
+  height: 100%;
 }
 
 .quick-entry {

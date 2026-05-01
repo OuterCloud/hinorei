@@ -20,6 +20,28 @@ export async function downloadFile(filename: string): Promise<void> {
   window.URL.revokeObjectURL(url)
 }
 
+export async function getFileContent(filename: string): Promise<string> {
+  const { data } = await client.get<{ content: string }>(`/files/content/${encodeURIComponent(filename)}`)
+  return data.content
+}
+
+export async function renameFile(filename: string, newName: string): Promise<{ filename: string }> {
+  const { data } = await client.patch(`/files/rename/${encodeURIComponent(filename)}`, { new_name: newName })
+  return data
+}
+
+export async function deleteFile(filename: string): Promise<void> {
+  await client.delete(`/files/delete/${encodeURIComponent(filename)}`)
+}
+
+export async function saveMarkdown(
+  filename: string,
+  content: string,
+): Promise<{ filename: string; size: number }> {
+  const { data } = await client.post('/files/save-markdown', { filename, content })
+  return data
+}
+
 export async function uploadFile(
   file: File,
   onProgress?: (percent: number) => void,

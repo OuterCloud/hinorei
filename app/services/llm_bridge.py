@@ -1,3 +1,6 @@
+import json
+from typing import Iterator
+
 import httpx
 
 from app.core.config import settings
@@ -19,7 +22,7 @@ def chat(
     message: str,
     model: str = "",
     system: str = "You are a helpful assistant.",
-    max_tokens: int = 1000,
+    max_tokens: int = 8192,
 ) -> str:
     """
     发送消息到 LLM Bridge（OpenAI 兼容接口），返回文本回复。
@@ -41,8 +44,47 @@ def chat(
     ]
     payload = {"model": model, "messages": messages, "max_tokens": max_tokens}
 
-    with httpx.Client(timeout=60.0) as client:
+    with httpx.Client(timeout=120.0) as client:
         response = client.post(url, json=payload, headers=headers)
         response.raise_for_status()
 
     return response.json()["choices"][0]["message"]["content"]
+
+
+def chat_stream(
+    message: str,
+    model: str = "",
+    system: str = "You are a helpful assistant.",
+    max_tokens: int = 8192,
+) -> Iterator[str]:
+    """流式调用 LLM Bridge，逐块 yield 文本内容。"""
+    url = f"{settings.llm_bridge_base_url}/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {settings.llm_bridge_api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": message},
+        ],
+        "max_tokens": max_tokens,
+        "stream": True,
+    }
+    with httpx.Client(timeout=120.0) as client:
+        with client.stream("POST", url, json=payload, headers=headers) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if not line or not line.startswith("data: "):
+                    continue
+                data = line[6:]
+                if data.strip() == "[DONE]":
+                    return
+                try:
+                    obj = json.loads(data)
+                    delta = obj["choices"][0]["delta"].get("content", "")
+                    if delta:
+                        yield delta
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    continue

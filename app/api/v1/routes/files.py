@@ -1,8 +1,10 @@
 import os
+import re
 
 import aiofiles
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, HTMLResponse
+from pydantic import BaseModel
 
 DOWNLOAD_DIR = "can_be_downloaded"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -31,12 +33,74 @@ async def download_page():
     return HTMLResponse(content=html)
 
 
+@router.get("/content/{filename}")
+async def get_file_content(filename: str):
+    file_path = os.path.join(DOWNLOAD_DIR, filename)
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    try:
+        async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+            content = await f.read()
+        return {"content": content}
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=415, detail="File is not text-readable")
+
+
 @router.get("/download/{filename}")
 async def download_file(filename: str):
     file_path = os.path.join(DOWNLOAD_DIR, filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     return FileResponse(file_path, media_type="application/octet-stream", filename=filename)
+
+
+class SaveMarkdownRequest(BaseModel):
+    filename: str
+    content: str
+
+
+@router.post("/save-markdown")
+async def save_markdown(body: SaveMarkdownRequest):
+    # 只允许 .md 扩展名，清理文件名中的危险字符
+    name = re.sub(r"[^\w\-. ]", "_", body.filename.strip())
+    if not name.endswith(".md"):
+        name += ".md"
+    file_path = os.path.join(DOWNLOAD_DIR, name)
+    try:
+        async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+            await f.write(body.content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    stat = os.stat(file_path)
+    return {"filename": name, "size": stat.st_size}
+
+
+class RenameRequest(BaseModel):
+    new_name: str
+
+
+@router.patch("/rename/{filename}")
+async def rename_file(filename: str, body: RenameRequest):
+    src = os.path.join(DOWNLOAD_DIR, filename)
+    if not os.path.isfile(src):
+        raise HTTPException(status_code=404, detail="File not found")
+    new_name = re.sub(r"[^\w\-. ]", "_", body.new_name.strip())
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    dst = os.path.join(DOWNLOAD_DIR, new_name)
+    if os.path.exists(dst):
+        raise HTTPException(status_code=409, detail="File already exists")
+    os.rename(src, dst)
+    return {"filename": new_name}
+
+
+@router.delete("/delete/{filename}")
+async def delete_file(filename: str):
+    path = os.path.join(DOWNLOAD_DIR, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="File not found")
+    os.remove(path)
+    return {"message": "deleted"}
 
 
 @router.post("/upload")

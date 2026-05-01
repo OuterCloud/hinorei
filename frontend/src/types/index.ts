@@ -45,3 +45,9 @@ export interface HealthStatus {
 
 // Provider types
 export type Provider = 'minimax' | 'llm_bridge'
+
+// Share types
+export interface ShareResponse {
+  share_id: string
+  share_url: string
+}

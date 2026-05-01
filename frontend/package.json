@@ -2,6 +2,7 @@
   "name": "hinorei-frontend",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc && vite build",
@@ -11,15 +12,19 @@
     "@iconify/vue": "^4.1.2",
     "@vueuse/core": "^10.11.0",
     "axios": "^1.7.2",
+    "github-markdown-css": "^5.9.0",
     "highlight.js": "^11.9.0",
+    "html2canvas": "^1.4.1",
     "markdown-it": "^14.1.0",
     "naive-ui": "^2.38.2",
     "pinia": "^2.1.7",
+    "qrcode": "^1.5.4",
     "vue": "^3.4.29",
     "vue-router": "^4.3.3"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",
+    "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-vue": "^5.0.5",
     "typescript": "^5.4.5",
     "vite": "^5.3.1",

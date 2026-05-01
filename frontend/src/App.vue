@@ -2,7 +2,9 @@
   <n-config-provider :theme="theme" :locale="zhCN" :date-locale="dateZhCN">
     <n-message-provider>
       <n-notification-provider>
-        <router-view />
+        <n-dialog-provider>
+          <router-view />
+        </n-dialog-provider>
       </n-notification-provider>
     </n-message-provider>
   </n-config-provider>
@@ -14,6 +16,7 @@ import {
   NConfigProvider,
   NMessageProvider,
   NNotificationProvider,
+  NDialogProvider,
   darkTheme,
   useOsTheme,
   zhCN,

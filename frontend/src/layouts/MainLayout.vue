@@ -29,7 +29,7 @@
         <n-text strong style="font-size: 16px">{{ currentTitle }}</n-text>
       </n-layout-header>
 
-      <n-layout-content style="padding: 24px; overflow: auto">
+      <n-layout-content position="absolute" style="padding: 24px; overflow: hidden; display: flex; flex-direction: column">
         <router-view />
       </n-layout-content>
     </n-layout>

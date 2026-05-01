@@ -1,5 +1,5 @@
 <template>
-  <div class="files-page">
+  <div class="files-page" style="overflow: auto; height: 100%">
     <n-space vertical :size="16">
       <UploadZone @uploaded="filesStore.fetchFiles" />
       <n-card title="文件列表">
@@ -9,7 +9,7 @@
             刷新
           </n-button>
         </template>
-        <FileList :files="filesStore.files" :loading="filesStore.loading" />
+        <FileList :files="filesStore.files" :loading="filesStore.loading" @refresh="filesStore.fetchFiles" />
       </n-card>
     </n-space>
   </div>
