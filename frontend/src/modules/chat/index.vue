@@ -46,7 +46,7 @@
 import { ref, h } from 'vue'
 import { NCard, NButton, NModal, NInput, useNotification } from 'naive-ui'
 import { useRouter } from 'vue-router'
-import { Icon } from '@iconify/vue'
+import { Icon as _Icon } from '@iconify/vue'
 import MessageList from './components/MessageList.vue'
 import ChatInput from './components/ChatInput.vue'
 import ShareModal from './components/ShareModal.vue'

@@ -8,6 +8,11 @@ venv/
 dist/
 .pytest_cache/
 .ruff_cache/
+.DS_Store
+
+# User files
+can_be_downloaded/
+shared_images/
 
 # Frontend
 frontend/node_modules/

@@ -18,7 +18,7 @@ frontend-build:
 	cd frontend && pnpm build
 
 dev: frontend-build
-	uvicorn app.main:app --reload
+	uvicorn app.main:app --reload --host $${HINOREI_HOST:-0.0.0.0} --port $${HINOREI_BACKEND_PORT:-8000}
 
 start:
 	./deploy.sh start

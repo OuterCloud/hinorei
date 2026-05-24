@@ -2,9 +2,9 @@
 # =============================================================================
 # deploy.sh — Hinorei 服务部署脚本
 # 用法:
-#   ./deploy.sh start   [PORT] [--host HOST] [--port PORT] [-p PORT] [--workers N] [-B]
+#   ./deploy.sh start   [PORT] [--host HOST] [--backend-port PORT] [--frontend-port PORT] [--workers N] [-B]
 #   ./deploy.sh stop
-#   ./deploy.sh restart [PORT] [--host HOST] [--port PORT] [-p PORT] [--workers N] [-B]
+#   ./deploy.sh restart [PORT] [--host HOST] [--backend-port PORT] [--frontend-port PORT] [--workers N] [-B]
 #   ./deploy.sh status
 #   ./deploy.sh build           # 仅编译前端，不启动服务
 #   ./deploy.sh debug  [PORT]   # 调试模式：后端热重载 + 前端 HMR，Ctrl+C 退出
@@ -28,7 +28,8 @@ DIST_DIR="$FRONTEND_DIR/dist"
 # 默认配置（可被命令行参数覆盖）
 # --------------------------------------------------------------------------- #
 HOST="${HINOREI_HOST:-0.0.0.0}"
-PORT="${HINOREI_PORT:-8000}"
+BACKEND_PORT="${HINOREI_BACKEND_PORT:-${HINOREI_PORT:-8000}}"
+FRONTEND_PORT="${HINOREI_FRONTEND_PORT:-5173}"
 WORKERS="${HINOREI_WORKERS:-1}"
 FORCE_BUILD=false
 
@@ -67,9 +68,11 @@ ${BOLD}命令:${RESET}
 
 ${BOLD}选项:${RESET}
   --host HOST       监听地址（默认: 0.0.0.0，可用 HINOREI_HOST 环境变量设置）
-  --port PORT, -p PORT
-                    监听端口（默认: 8000，可用 HINOREI_PORT 环境变量设置）
-  PORT              直接写端口号作为第一个位置参数（同 --port）
+  --backend-port PORT, -p PORT
+                    后端监听端口（默认: 8000，可用 HINOREI_BACKEND_PORT 环境变量设置）
+  --frontend-port PORT
+                    前端开发服务器端口（默认: 5173，可用 HINOREI_FRONTEND_PORT 环境变量设置）
+  PORT              直接写端口号作为第一个位置参数（同 --backend-port）
   --workers N       工作进程数（默认: 1，可用 HINOREI_WORKERS 环境变量设置）
   -B, --force-build 强制重新编译前端（默认：源码无变化时跳过）
   -f                配合 logs 命令实时追踪日志
@@ -78,9 +81,9 @@ ${BOLD}示例:${RESET}
   ./deploy.sh start              # 源码未变化则跳过编译
   ./deploy.sh start 9000
   ./deploy.sh start -B           # 强制重编
-  ./deploy.sh start -p 9000 --workers 2
+  ./deploy.sh start --backend-port 9000 --workers 2
   ./deploy.sh debug              # 本地调试，改代码自动生效
-  ./deploy.sh debug 9000         # 指定后端端口
+  ./deploy.sh debug --backend-port 9000 --frontend-port 3000
   ./deploy.sh logs -f
 EOF
 }
@@ -91,13 +94,14 @@ EOF
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --host)          HOST="$2"; shift 2 ;;
-      --port|-p)       PORT="$2"; shift 2 ;;
-      --workers)       WORKERS="$2"; shift 2 ;;
-      -B|--force-build) FORCE_BUILD=true; shift ;;
-      -h|--help)       usage; exit 0 ;;
-      [0-9]*)          PORT="$1"; shift ;;  # 位置参数：直接写端口号
-      *)               shift ;;  # 忽略未知参数
+      --host)            HOST="$2"; shift 2 ;;
+      --backend-port|-p) BACKEND_PORT="$2"; shift 2 ;;
+      --frontend-port)   FRONTEND_PORT="$2"; shift 2 ;;
+      --workers)         WORKERS="$2"; shift 2 ;;
+      -B|--force-build)  FORCE_BUILD=true; shift ;;
+      -h|--help)         usage; exit 0 ;;
+      [0-9]*)            BACKEND_PORT="$1"; shift ;;  # 位置参数：直接写后端端口号
+      *)                 shift ;;  # 忽略未知参数
     esac
   done
 }
@@ -205,17 +209,17 @@ cmd_start() {
   # 创建日志目录
   mkdir -p "$LOG_DIR"
 
-  kill_port "$PORT"
+  kill_port "$BACKEND_PORT"
 
   info "启动后端服务..."
-  info "  地址:    http://${HOST}:${PORT}"
+  info "  地址:    http://${HOST}:${BACKEND_PORT}"
   info "  Workers: ${WORKERS}"
   info "  日志:    $LOG_FILE"
 
   # 用 nohup 后台启动，工作目录设为项目根
   nohup "$VENV_DIR/bin/uvicorn" app.main:app \
     --host "$HOST" \
-    --port "$PORT" \
+    --port "$BACKEND_PORT" \
     --workers "$WORKERS" \
     >> "$LOG_FILE" 2>&1 &
 
@@ -227,7 +231,7 @@ cmd_start() {
   while (( attempts < 10 )); do
     sleep 0.5
     if kill -0 "$pid" 2>/dev/null; then
-      success "服务已启动（PID ${pid}）→ http://${HOST}:${PORT}"
+      success "服务已启动（PID ${pid}）→ http://${HOST}:${BACKEND_PORT}"
       return 0
     fi
     (( attempts++ ))
@@ -291,25 +295,26 @@ cmd_debug() {
   fi
 
   info "启动调试模式"
-  info "  后端: http://${HOST}:${PORT}  （Python 改动自动重载）"
-  info "  前端: http://localhost:5173   （Vite HMR 热更新）"
+  info "  后端: http://${HOST}:${BACKEND_PORT}  （Python 改动自动重载）"
+  info "  前端: http://localhost:${FRONTEND_PORT}   （Vite HMR 热更新）"
   info "  按 Ctrl+C 退出所有进程"
   echo ""
 
-  kill_port "$PORT"
+  kill_port "$BACKEND_PORT"
+  kill_port "$FRONTEND_PORT"
 
   # 后台启动后端（--reload 监听 Python 文件变动）
   "$VENV_DIR/bin/uvicorn" app.main:app \
     --reload \
     --host "$HOST" \
-    --port "$PORT" &
+    --port "$BACKEND_PORT" &
   local backend_pid=$!
 
   # Ctrl+C 或脚本退出时一并终止后端
   trap "echo ''; info '正在退出...'; kill $backend_pid 2>/dev/null; wait $backend_pid 2>/dev/null; exit 0" INT TERM
 
-  # 前台启动前端（Ctrl+C 会触发上方 trap）
-  (cd "$FRONTEND_DIR" && pnpm dev) || true
+  # 前台启动前端，传入端口和代理目标
+  (cd "$FRONTEND_DIR" && VITE_PORT="$FRONTEND_PORT" VITE_PROXY_TARGET="http://${HOST}:${BACKEND_PORT}" pnpm dev --host "$HOST" --port "$FRONTEND_PORT") || true
 
   # 前端退出后也清理后端
   kill $backend_pid 2>/dev/null
@@ -333,7 +338,7 @@ cmd_status() {
     echo -e "  状态:    ${GREEN}● 运行中${RESET}"
     echo    "  PID:     $pid"
     [[ -n "$uptime_info" ]] && echo "  运行时长: $uptime_info"
-    echo    "  地址:    http://${HOST}:${PORT}"
+    echo    "  地址:    http://${HOST}:${BACKEND_PORT}"
   else
     echo -e "  状态:    ${RED}● 未运行${RESET}"
     rm -f "$PID_FILE"

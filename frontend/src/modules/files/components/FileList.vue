@@ -22,14 +22,14 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref } from 'vue'
-import { NDataTable, NButton, NText, NModal, NInput, useNotification, useDialog } from 'naive-ui'
+import { h, ref, reactive } from 'vue'
+import { NDataTable, NButton, NText, NModal, NInput, NProgress, useNotification, useDialog } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import type { FileInfo } from '@/types'
 import { downloadFile, renameFile, deleteFile } from '@/api/files'
 import FilePreviewModal from './FilePreviewModal.vue'
 
-const props = defineProps<{ files: FileInfo[]; loading: boolean }>()
+defineProps<{ files: FileInfo[]; loading: boolean }>()
 const emit = defineEmits<{ refresh: [] }>()
 
 const notification = useNotification()
@@ -87,11 +87,28 @@ function openDelete(filename: string) {
 }
 
 // ── 下载 ────────────────────────────────────────
+const downloadProgress = reactive<Record<string, number>>({})
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
 async function handleDownload(filename: string) {
+  if (downloadProgress[filename] !== undefined) return // 正在下载中
+  downloadProgress[filename] = 0
   try {
-    await downloadFile(filename)
-  } catch (err) {
+    const savedName = await downloadFile(filename, (percent) => {
+      downloadProgress[filename] = percent
+    })
+    notification.success({ title: '下载完成', content: `已保存为: ${savedName}`, duration: 2500 })
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === 'AbortError') return // 用户取消
     notification.error({ title: '下载失败', content: err instanceof Error ? err.message : '未知错误', duration: 4000 })
+  } finally {
+    delete downloadProgress[filename]
   }
 }
 
@@ -154,13 +171,32 @@ const columns: DataTableColumns<FileInfo> = [
   {
     title: '操作',
     key: 'actions',
-    width: 200,
-    render: (row) =>
-      h('div', { style: 'display:flex;gap:6px' }, [
-        h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => handleDownload(row.name) }, { default: () => '下载' }),
+    width: 240,
+    render: (row) => {
+      const progress = downloadProgress[row.name]
+      const isDownloading = progress !== undefined
+
+      if (isDownloading) {
+        // 负数表示未知总量，显示已下载大小
+        if (progress < 0) {
+          return h('div', { style: 'display:flex;align-items:center;gap:8px;min-width:180px' }, [
+            h(NProgress, { type: 'line', percentage: 100, status: 'info', showIndicator: false, style: 'flex:1' }),
+            h(NText, { depth: 3, style: 'font-size:12px;white-space:nowrap' }, { default: () => formatBytes(-progress) }),
+          ])
+        }
+        return h('div', { style: 'display:flex;align-items:center;gap:8px;min-width:180px' }, [
+          h(NProgress, { type: 'line', percentage: progress, indicatorPlacement: 'inside', style: 'flex:1' }),
+        ])
+      }
+
+      const downloadBtn = h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => handleDownload(row.name) }, { default: () => '下载' })
+
+      return h('div', { style: 'display:flex;gap:6px' }, [
+        downloadBtn,
         h(NButton, { size: 'small', ghost: true, onClick: () => openRename(row.name) }, { default: () => '重命名' }),
         h(NButton, { size: 'small', type: 'error', ghost: true, onClick: () => openDelete(row.name) }, { default: () => '删除' }),
-      ]),
+      ])
+    },
   },
 ]
 </script>
